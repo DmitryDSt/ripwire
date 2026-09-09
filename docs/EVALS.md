@@ -12999,7 +12999,7 @@ markdown headings in any spelling, so those two formats serve as one whole-file 
 `section-granular` only where it is true, and gate arm C pins both directions.
 
 **`.txt` was REFUTED by census in the same lane, not deferred.** 69 of 69 crawled `.txt` files in this
-repository are build manifests, gate fixtures or captured output — 583 KB, the largest 69,729 B = 7.5x the
+repository are build manifests, gate fixtures or captured output — 571,706 B, the largest 69,729 B = 7.5x the
 corpus median document — and none is prose. Across three checkouts on the development machine the
 commonest `.txt` basenames are `requirements.txt` (111), `meson_options.txt` (67) and `CMakeLists.txt`
 (50) against `README.txt` (71) and `index.txt` (32). Admitting it would hand BM25 half a megabyte of gate

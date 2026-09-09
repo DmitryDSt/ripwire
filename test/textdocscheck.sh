@@ -18,7 +18,7 @@
 # WHAT IS REFUSED, AND WHY — the arm that keeps this tier from becoming the thing it replaces:
 #   .txt   REFUTED BY CENSUS, not by taste. `.txt` is the universal "arbitrary bytes" extension. In this
 #          repository 69 of 69 crawled `.txt` files are build manifests, gate fixtures or captured output
-#          (583 KB; the largest is 69,729 B = 7.5x the corpus median document) and NONE is prose. Across
+#          (571,706 B; the largest is 69,729 B = 7.5x the corpus median document) and NONE is prose. Across
 #          three checkouts on the development machine the commonest `.txt` basenames are requirements.txt
 #          (111), meson_options.txt (67) and CMakeLists.txt (50) against README.txt (71) and index.txt
 #          (32). Admitting it would hand BM25 half a megabyte of gate dumps that the generated-document
