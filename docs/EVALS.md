@@ -21,7 +21,7 @@ section, and it is not an afterthought.
 | **Co-change / known-item evals** | `--eval`, `--eval-retrieval` (see `bench/ANSWERQUALITY.md`) | Whether the tool surfaces the other files a real historical commit touched; and known-item retrieval across four rankers. |
 | **Ensemble calibration harness** | `bench/ensemblecal/` | Whether `--ensemble`'s four evidence families are actually orthogonal, how often each fires, how stable each is across commits — and the preset ladder derived from that (§9). |
 | **Differential argv harness** | `test/argvdiffcheck.sh` | That a refactor changed *nothing observable*: two binaries, every argv vector, stdout + stderr + exit code byte-identical. |
-| **The gate suite** | `test/regression.sh`, `test/pargates.py` | 566 gate scripts plus the determinism, cache-transparency and golden contracts. |
+| **The gate suite** | `test/regression.sh`, `test/pargates.py` | 567 gate scripts plus the determinism, cache-transparency and golden contracts. |
 | **`--quality-delta`** | `src/quality.h` | Ten measured code-quality failure modes, reported only where a change made them worse. |
 
 ### The labeling protocol (why the held-out eval is allowed to disagree with the ranker)
@@ -5579,7 +5579,7 @@ copy here would be exactly the dialect divergence that gate exists to catch. Com
 tags, wrap, stable-order defaults), seven individually invoked standalone gates (`g1freshcheck`,
 `skillscan`, `htmlexport`, `compresscheck`, `handoffcheck`, `releaseinstallcheck`,
 `taskroutecheck`), and a single loop
-naming **566 gate scripts**, all of which exist on disk.
+naming **567 gate scripts**, all of which exist on disk.
 
 `python3 test/pargates.py . ./build/ripwire -j 6` runs the same scripts in parallel so a full
 verification fits in one sitting. It does not modify `regression.sh`.
@@ -6491,7 +6491,7 @@ Listed because the reason is more useful than the silence.
   shipped**. See `bench/locbench/anchorhop_calib.json`. The mention anchor's reproducible numbers are
   the ablations in §4.
 - **A single round gate-count.** Two in-tree numbers disagree (`test/pargates.py`'s docstring says
-  ~210; `test/argvdiffcheck.sh` says 200+), while the loop in `test/regression.sh` names 566. The
+  ~210; `test/argvdiffcheck.sh` says 200+), while the loop in `test/regression.sh` names 567. The
   loop is the authority; the stale docstrings are a known drift. `test/manifestcheck.sh` asserts this
   very number against the loop's actual length, so it cannot go stale silently again.
 - **"282 argv vectors."** The gate asserts a floor of ≥250 assembled from five sources; 282 was a
@@ -13007,3 +13007,77 @@ dumps that the generated-document demotion does not catch (no marker, no fences 
 `classifyGeneratedDoc` states about itself). `.txt` stays prose to every reader-facing lens and an
 unindexed extension in `unindexed=`, alongside `.log`, `.lock` and `.out`. An evidence-based admission
 test that reads BYTES rather than the extension is the open follow-up.
+
+## The super-linear warm `--grep` floor: measured to one operation, fixed, byte-identical (2026-09-09)
+
+The tgrep head-to-head of 2026-09-09 (its section "Head-to-head vs tgrep (microsoft/tgrep 1.0.5)" lands
+with the harvest-tgrep lane) left one item open: warm `--grep` cost 40.2 µs/file at 2,240 files,
+39.1 µs at 15,865 and 937.8 µs at 182,555 — a 24× per-file regression across an 11.5× corpus step — and
+it named the decisive experiment: time the verb with the graph construction stubbed out. This section
+ran that experiment, then followed the house perf reflex (start from the measurement, inspect only the
+symbols the profile names). The full phase tables and the reproduce block are in `bench/PROFILE.md`
+("2026-09-09 — the super-linear warm `--grep` floor"); this is the evidence chain and the verdict.
+
+**The stub, without a stub.** `--help-task` returns before `buildGraph` and shares `--grep`'s lean cache
+blob, so it is the crawl + cache-load + validation + model-build arm with the graph removed. Warm on
+llvm-project (182,555 files, same checkout as the head-to-head), interleaved, two reps each:
+
+| arm | wall | peak RSS |
+| --- | ---: | ---: |
+| `--grep=<absent literal>` | 159.7 s, 153.9 s | 6.15 GB |
+| `--callers=main` (graph, no scan) | 152.9 s, 151.8 s | 5.91 GB |
+| `--help-task` (no graph) | 3.8 s, 3.4 s | 5.93 GB |
+
+The floor did move — by 150 s. The cost is the graph; the cache load plus per-file validation is
+16 µs/file on llvm against 28 µs/file on go, linear; and the memory-cliff hypothesis is refuted on the
+same row, since the 5.9 GB is the ingest's own tables and is present in the arm that takes 3.8 s.
+
+**Which operation.** The ingest path already carried `PROFILE_SCOPE_DESCRIBE` scopes at the grep path's
+granularity for crawl, cache and model; `buildGraph` carried one scope for the whole function. This round
+added the loop and post-loop scopes that land, plus a scratch six-span split inside the per-reference
+loop. Of 153.2 s in the loop, 145.1 s sat in ONE span — CHA-lite cone + arity + locality — across
+2,213,632 references at a mean 65.5 µs and a worst case of 41.7 ms. Split again: arity 0.015 s, locality
+0.27 s, **the CHA-lite cone ≈ 143 s**. The obvious hypothesis was measured and rejected: the five linear
+passes over same-name candidates visited 1.23 billion candidates and cost 3.3 s.
+
+The cone was recomputed per call: 86,667 BFS pairs for 2,984 distinct receiver types (≈29 rebuilds each),
+mean cone 1,075 class names, quadratic `std::find` dedup, 1.65 ms a cone. On go the same span is 1.1 ms
+in total because the model has no inheritance edges there — the flat rungs of the ladder were flat because
+the corpora had no deep hierarchies, not because the code was linear.
+
+**The fix and its proof.** `ChaConeMemo` (`src/graph.h`) computes each receiver type's cone once, over
+interned class names, with the per-call walk's exact seed, discovery order and 4,096 outer-loop cap, and
+answers membership by binary search. Warm llvm: `--grep` 9.2 s / 9.0 s, `--callers` 8.6 s / 8.7 s, the
+default map 248 s → 10 s; `--help-task` unchanged. Default maps at `--top-k=100000` are byte-identical
+pre/post on go (10,415,057 B) and llvm (21,802,319 B). Gate `test/chaconecheck.sh` pins the set the memo
+must reproduce: a cone keyed on the receiver type and not the callee (Dog and Cat on one `speak`), the
+memo-hit path from a second file, a receiver with no inheritance facts degrading rather than emptying the
+tier, a parameter-receiver control, and the cap's own shape (Base→{A,B}, A→A1..A4095, B→B1: B is never
+expanded, so B1::m is outside the cone; count=4095, amb="1"). All arms pass against the pre-fix binary —
+the expected values are the per-call walk's own answers — and 24 existing resolver gates pass unchanged.
+
+**What remains, stated as a floor.** Warm `--grep` on llvm is 9 s: `buildGraph` 5.9 s (the resolve loop
+4.5 s, of which the candidate spray over 1.23 billion visits is 2.2 s), ingest 2.8 s, the 2.9 GB scan
+1.0 s on its own thread. Per file that is 50 µs at 182,555 files against 33 µs at 15,865 — 1.5×, not 24×.
+`rg` answers the same absent literal in 4.3 s; a resident tgrep in 0.018 s. The next rung is the linear
+candidate passes, which is a different design (a per-name file/directory index) and is not started here.
+The cold parse on llvm carried the same ~186 s cone cost inside its 231 s and was not re-measured.
+
+**The head-to-head's top rung, re-timed post-fix.** The same six frozen queries the lane declared for the
+llvm rung, the same argv (`--grep-in=any`), the plain build with the memo, warm, three reps each, medians:
+
+| query | ripwire warm, head-to-head (pre-fix) | **ripwire warm, post-fix** |
+| --- | ---: | ---: |
+| L1 `pthread_mutex_lock` | 193.09 s | **8.99 s** |
+| L3 `TODO` | 195.58 s | **9.00 s** |
+| L6 `zzqxvnotpresentzz` (absent) | 176.35 s | **9.20 s** |
+| R3 `malloc.*free` | 215.34 s | **9.23 s** |
+| R4 `[Qq]z[Xx]v.*[Jj]w` (prefilter-defeating) | 171.19 s | **9.11 s** |
+| R1 `^#include` | 233.06 s | 10.08 s — not comparable: this branch predates the lane's line-anchor fix |
+
+Every query is now within a second of the absent literal: the scan is still hidden behind the graph, the
+graph is just 17× smaller. Re-deriving the lane's Q\* formula with its own tgrep numbers (B = 11.113 s,
+q_index = 2.7513 s over the same six) and a post-fix q_scan of ≈ 9.3 s gives **Q\* ≈ 1.7 queries against
+ripwire-warm** where the lane read 0.1 — the resident index still pays for itself inside a two-query
+session at this scale, but no longer "before the first query finishes". tgrep itself was not re-run; only
+the ripwire column moved.
