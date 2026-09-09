@@ -566,11 +566,12 @@ struct ChaConeMemo
     static constexpr std::size_t   kChaConeCap = 4096;          // per-walk discovery cap, unchanged from the per-call walk
     static constexpr std::uint32_t kNoCone     = 0xFFFFFFFFu;
 
-    // A cone handle: `ids == nullptr` ⇒ the receiver type has no inheritance facts (membership is equality with
-    // the type itself). Valid until the next coneFor() call — cones live in a growing vector.
+    // A cone handle: an INDEX into the memo's cone table, resolved inside contains() on every use, so no handle
+    // can dangle when the table grows (a raw pointer would be invalidated by the next fill). `index == kNoCone`
+    // ⇒ the receiver type has no inheritance facts: membership is equality with the type itself.
     struct Cone
     {
-        const std::vector<std::uint32_t>* ids;
+        std::uint32_t index;
     };
 
     ChaConeMemo( const HashMap<std::string, std::vector<std::string>>& chaUp,
@@ -607,7 +608,7 @@ struct ChaConeMemo
         const auto rit = idOf_.find( key_ );
         if( rit == idOf_.end() )
         {
-            return Cone{ nullptr };
+            return Cone{ kNoCone };
         }
         const std::uint32_t root = rit->second;
         if( coneIndex_[ root ] == kNoCone )
@@ -621,19 +622,20 @@ struct ChaConeMemo
             coneIndex_[ root ] = std::uint32_t( cones_.size() );
             cones_.push_back( std::move( cone ) );
         }
-        return Cone{ &cones_[ coneIndex_[ root ] ] };
+        return Cone{ coneIndex_[ root ] };
     }
 
     // Is a candidate's enclosing scope inside `cone`? A scope no inheritance fact ever named cannot be in any
     // interned cone; a scope-less free function is never a member-call target and is correctly excluded.
     bool contains( Cone cone, std::string_view recvType, const std::string& scope ) const
     {
-        if( cone.ids == nullptr )
+        if( cone.index == kNoCone )
         {
             return scope == recvType;
         }
-        const auto it = idOf_.find( scope );
-        return it != idOf_.end() && std::binary_search( cone.ids->begin(), cone.ids->end(), it->second );
+        const auto                        it  = idOf_.find( scope );
+        const std::vector<std::uint32_t>& ids = cones_[ cone.index ];   // resolved NOW, never held across a fill
+        return it != idOf_.end() && std::binary_search( ids.begin(), ids.end(), it->second );
     }
 
 private:
