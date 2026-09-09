@@ -8,7 +8,8 @@
 # All against TEMP homes + the repo tree, so it is CI-runnable and never touches the real ~/.hermes,
 # ~/.claude or ~/.agents.  HERMES_HOME is ALWAYS exported (not just a shell var) so the child
 # bash processes inherit the temporary home and can never fall back to the real $HOME/.hermes.
-# Usage:  test/hermesinstallcheck.sh
+# Usage:  test/hermesinstallcheck.sh   |   RIPWIRE_BIN=build/ripwire test/hermesinstallcheck.sh
+# (RIPWIRE_BIN feeds arm 6 only — arms 1-5 are about skills/install.sh and bind no binary.)
 # Exits non-zero on any failure. Does NOT edit regression.sh.
 set -u
 ROOT="$( cd "$( dirname "$0" )/.." && pwd )"
@@ -93,5 +94,55 @@ HOOK_STATUS=$?
 { [ "$HOOK_STATUS" -eq 2 ]; } \
     && ok "--hermes --hook fails with exit status 2 (hook not ported to the Hermes target yet)" \
     || no "--hermes --hook exited $HOOK_STATUS, expected 2 — or it succeeded, which is wrong"
+
+# ---- 6) the binary's own Hermes recipe resolves to the home the installer just populated ----
+# `ripwire wrap hermes` prints a paste-able recipe carrying two strings that live in src/wrap.h's
+# kAgentTargets row: the install FLAG, and the skills DIRECTORY that flag deploys to. The behaviour
+# those strings describe lives in skills/install.sh, which knows nothing about wrap.h. Nothing else
+# holds the pair together: PR #51 first landed them across six hand-edited branches, and the
+# kAgentTargets consolidation folded those into one row, so a future row edit is exactly the drift
+# this arm exists to catch. Binding BIN here is also what makes this gate answerable to
+# test/binoverridecheck.sh — arms 1-5 are about skills/install.sh alone, and a gate that never
+# invokes the binary it is handed stays GREEN against a binary that is entirely broken.
+BIN="${1:-${RIPWIRE_BIN:-$ROOT/build/ripwire}}"
+[ "${BIN#/}" = "$BIN" ] && BIN="$ROOT/$BIN"          # allow a repo-relative RIPWIRE_BIN
+[ -x "$BIN" ] || BIN="$( command -v ripwire 2>/dev/null || true )"
+if [ -z "$BIN" ] || [ ! -x "$BIN" ]; then
+    echo "  SKIP  wrap-recipe arm (no ripwire binary found via RIPWIRE_BIN / build/ripwire / PATH)"
+else
+    WRAP="$TMP/wrap-hermes.txt"
+    if ! "$BIN" wrap hermes >"$WRAP" 2>"$TMP/wrap-hermes.err"; then
+        no "ripwire wrap hermes exited non-zero — the binary cannot print its own Hermes recipe"
+    else
+        RECIPE=$( grep -m1 -E '^bash skills/install\.sh ' "$WRAP" || true )
+        FLAG=$( printf '%s\n' "$RECIPE" | awk '{ print $3 }' )
+        ADV=$( printf '%s\n' "$RECIPE" | sed -n 's/.*# deploy to \(.*\) (drift-gated).*/\1/p' )
+
+        { [ "$FLAG" = "--hermes" ]; } \
+            && ok "wrap hermes recommends the installer flag this gate exercises ($FLAG)" \
+            || no "wrap hermes recommends installer flag '${FLAG:-<none>}'; this gate installs with --hermes"
+
+        # The advertised path is deliberately UNexpanded in the recipe (it is meant to be pasted into
+        # a shell), so the gate resolves it the way a reader's shell would. HERMES_HOME is exported
+        # above and never empty here, so the ${...:-~/.hermes} default branch is not the one under
+        # test; the charset guard keeps a command substitution out of the resolving shell.
+        if [ -z "$ADV" ]; then
+            no "wrap hermes prints no '# deploy to <dir> (drift-gated)' path for the --hermes flag"
+        elif ! printf '%s' "$ADV" | grep -qE '^[A-Za-z0-9_~/${}:.-]+$'; then
+            no "wrap hermes advertises a deploy path with unexpected shell metacharacters: $ADV"
+        else
+            RESOLVED=$( HERMES_HOME="$HERMES_HOME" bash -c "printf '%s\n' \"$ADV\"" )
+            { [ "$RESOLVED" = "$HERMES_HOME/skills" ]; } \
+                && ok "wrap hermes advertises the skills home --hermes actually populated ($ADV)" \
+                || no "wrap hermes advertises '$ADV' -> '$RESOLVED', but --hermes deployed to $HERMES_HOME/skills"
+        fi
+
+        # the binary half of arm 5's honesty claim: the recipe must not tell anyone to run a flag
+        # combination the installer refuses.
+        { ! grep -q -- '--hermes --hook' "$WRAP"; } \
+            && ok "wrap hermes prints no --hook install line (arm 5 pins the installer's matching refusal)" \
+            || no "wrap hermes prints a '--hermes --hook' install line, but the installer refuses it with exit 2"
+    fi
+fi
 
 [ "$fail" -eq 0 ] && echo "hermesinstallcheck: ALL PASS" || { echo "hermesinstallcheck: FAILURES"; exit 1; }
