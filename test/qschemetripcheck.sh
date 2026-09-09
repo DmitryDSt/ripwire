@@ -34,6 +34,14 @@ SRC="$ROOT/src/quality.h"
 ING="$ROOT/src/ingest_cache.h"   # extraction-identity constants moved here (2026-08-29 ingest.cpp section split); the hashed CONCAT label keeps its historical spelling so the pin holds
 PIN="$ROOT/test/qschemetrip.hash"
 # RE-PIN LOG (the pin is a bare hash, so its justification has to live here).
+# 2026-09-09, PLAIN-TEXT PROSE TIER (test/textdocscheck.sh): kParserVer 84 -> 85 and
+#   kIngestParserVerMirror -> 85. `.rst`/`.adoc`/`.org`/`.mdx` join kLangTable on Lang::Markdown and the
+#   markdown BLOCK grammar, so the CRAWL ADMITS FILES IT PREVIOUSLY REFUSED. That is the one class of
+#   extraction change a per-file stat gate cannot self-heal — a v84 blob's file list has no record for the
+#   `.rst` it never saw, so the file is ABSENT rather than stale and only the header version can reject the
+#   blob. Record shapes are unchanged (a markdown file's records already existed), so kCacheVersion stays
+#   18. No Snapshot-side function changed and kQSnapCacheScheme stays 8: what a cached Snapshot MEANS is
+#   untouched — the corpus it is computed over is what grew.
 # 2026-09-07, ES DEFAULT IMPORTS (test/lib/jsdefaultimport.sh): kParserVer and its quality mirror
 #   move 81 -> 82 for default import/export facts. Record layouts and Snapshot-side functions are
 #   unchanged: kCacheVersion stays 16 and kQSnapCacheScheme stays 8.

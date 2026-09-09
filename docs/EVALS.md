@@ -21,7 +21,7 @@ section, and it is not an afterthought.
 | **Co-change / known-item evals** | `--eval`, `--eval-retrieval` (see `bench/ANSWERQUALITY.md`) | Whether the tool surfaces the other files a real historical commit touched; and known-item retrieval across four rankers. |
 | **Ensemble calibration harness** | `bench/ensemblecal/` | Whether `--ensemble`'s four evidence families are actually orthogonal, how often each fires, how stable each is across commits — and the preset ladder derived from that (§9). |
 | **Differential argv harness** | `test/argvdiffcheck.sh` | That a refactor changed *nothing observable*: two binaries, every argv vector, stdout + stderr + exit code byte-identical. |
-| **The gate suite** | `test/regression.sh`, `test/pargates.py` | 564 gate scripts plus the determinism, cache-transparency and golden contracts. |
+| **The gate suite** | `test/regression.sh`, `test/pargates.py` | 566 gate scripts plus the determinism, cache-transparency and golden contracts. |
 | **`--quality-delta`** | `src/quality.h` | Ten measured code-quality failure modes, reported only where a change made them worse. |
 
 ### The labeling protocol (why the held-out eval is allowed to disagree with the ranker)
@@ -5579,7 +5579,7 @@ copy here would be exactly the dialect divergence that gate exists to catch. Com
 tags, wrap, stable-order defaults), seven individually invoked standalone gates (`g1freshcheck`,
 `skillscan`, `htmlexport`, `compresscheck`, `handoffcheck`, `releaseinstallcheck`,
 `taskroutecheck`), and a single loop
-naming **564 gate scripts**, all of which exist on disk.
+naming **566 gate scripts**, all of which exist on disk.
 
 `python3 test/pargates.py . ./build/ripwire -j 6` runs the same scripts in parallel so a full
 verification fits in one sitting. It does not modify `regression.sh`.
@@ -6491,7 +6491,7 @@ Listed because the reason is more useful than the silence.
   shipped**. See `bench/locbench/anchorhop_calib.json`. The mention anchor's reproducible numbers are
   the ablations in §4.
 - **A single round gate-count.** Two in-tree numbers disagree (`test/pargates.py`'s docstring says
-  ~210; `test/argvdiffcheck.sh` says 200+), while the loop in `test/regression.sh` names 564. The
+  ~210; `test/argvdiffcheck.sh` says 200+), while the loop in `test/regression.sh` names 566. The
   loop is the authority; the stale docstrings are a known drift. `test/manifestcheck.sh` asserts this
   very number against the loop's actual length, so it cannot go stale silently again.
 - **"282 argv vectors."** The gate asserts a floor of ≥250 assembled from five sources; 282 was a
@@ -12954,3 +12954,56 @@ The measurement says the cost that matters is *cumulative and re-billed*, so the
 `bench/substitution_report.py` — a per-session roll-up carrying the token columns this ledger computes
 beside the call counts it already prints, so terminality and size are read together. That is a bench
 change, not an output change, and it adds no byte to any answer.
+## The plain-text prose tier — heading tiling vs one whole-file unit (2026-09-09)
+
+`.rst`, `.adoc`, `.org` and `.mdx` join `kLangTable` on `Lang::Markdown` and the vendored markdown BLOCK
+grammar (gate `test/textdocscheck.sh`). Two designs were possible and the choice was measured, not argued:
+serve each document as ONE prose unit, or tile it into sections the way `--recall` already tiles markdown.
+
+**Why the question is decidable at all.** reStructuredText's title underlines (`=====`, `-----`) are
+byte-for-byte setext headings, so the existing section tier tiles a `.rst` document with no new code —
+the tiled arm costs nothing to build, which is what makes "is it worth it" a real question rather than a
+budget one.
+
+**Corpus.** The astropy documentation tree at
+`bench/external/swex/snapshots/astropy__astropy-14508/docs` — 292 `.rst` files, 2.28 MB. Authored by
+nobody involved in this tool, and by a project that predates it.
+
+**Arms.** A = the tree as committed (tiled). B = the ONE-UNIT control: the identical prose with every
+setext-capable underline line (`^=+$`, `^-+$`) deleted, so no headings exist and `--recall` must serve
+whole documents. Prose bytes are otherwise untouched; the control is asserted to have taken
+(`install.rst`: 15 underlines → 0; corpora 2,283,152 B vs 2,253,938 B).
+
+**Questions.** Five, pre-registered with their answer strings before the first run, each answered in one
+section of one document: the LTS backport window, conda installation, disabling logging colour, the
+Quantity/numpy slice deficiency, and the glossary's one-element-tuple notation.
+
+**Metric.** Per (question, budget): does the SERVED text contain the pre-registered answer string, and
+what does the bundle cost (`est_tokens`)? Budgets are `--max-tokens` 2000 / 4000 / 8000 — the knob that
+SHAPES a recall bundle, not `--token-budget`, which asserts and exits 3.
+
+| `--max-tokens` | tiled hits | one-unit hits | tiled mean est_tokens | one-unit mean est_tokens |
+| --- | --- | --- | --- | --- |
+| 2000 | 5/5 | 3/5 | 1299 | 1436 |
+| 4000 | 5/5 | 2/5 | 2659 | 2781 |
+| 8000 | 5/5 | 4/5 | 5379 | 6041 |
+| **total** | **15/15** | **9/15** | | −6% / −4% / −11% |
+
+Tiling wins on both axes at every budget. It is shipped.
+
+**What this does NOT show.** N = 5 questions on ONE corpus in ONE format; it is a design decision between
+two spellings of a feature, not a retrieval-quality claim. Coverage inside `.rst` is partial and stated
+rather than implied: `=` (701) and `-` (620) are 1321 of that corpus's 1948 underlines (67.8%), and
+`*`/`^`/`"`/`~`/`+`/`#` titles read as prose. AsciiDoc's `== Section` and Org's `* Heading` are not
+markdown headings in any spelling, so those two formats serve as one whole-file unit — `--recall` prints
+`section-granular` only where it is true, and gate arm C pins both directions.
+
+**`.txt` was REFUTED by census in the same lane, not deferred.** 69 of 69 crawled `.txt` files in this
+repository are build manifests, gate fixtures or captured output — 571,706 B, the largest 69,729 B = 7.5x the
+corpus median document — and none is prose. Across three checkouts on the development machine the
+commonest `.txt` basenames are `requirements.txt` (111), `meson_options.txt` (67) and `CMakeLists.txt`
+(50) against `README.txt` (71) and `index.txt` (32). Admitting it would hand BM25 half a megabyte of gate
+dumps that the generated-document demotion does not catch (no marker, no fences — the limit
+`classifyGeneratedDoc` states about itself). `.txt` stays prose to every reader-facing lens and an
+unindexed extension in `unindexed=`, alongside `.log`, `.lock` and `.out`. An evidence-based admission
+test that reads BYTES rather than the extension is the open follow-up.
