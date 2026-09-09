@@ -32,7 +32,7 @@
 #   test/textdocscheck.sh
 #   RIPWIRE_BIN=asan/ripwire test/textdocscheck.sh
 #
-# Exits non-zero on any failure; prints PASS/FAIL per check and ALL PASS on success.
+# Exits non-zero on any failure; prints PASS/FAIL (and one uid-gated SKIP) per check, ALL PASS on success.
 # Does NOT edit regression.sh. Builds its fixture under mktemp — nothing is written into the checkout.
 
 set -u
@@ -237,6 +237,33 @@ fi
 grep -q '0007-isolation\.rst' "$TMP/cold.xml" \
     && ok "D: the cached run really contains the .rst (the comparison is not two empty corpora)" \
     || no "D: the .rst is absent from the cached run — arm D compared nothing"
+
+# ═══════════════════════════════════════════════════════════════════════════
+echo
+echo "=== D2: an admitted document that cannot be READ is disclosed, never a silent zero ==="
+# ═══════════════════════════════════════════════════════════════════════════
+# A file this tier ADMITS and then fails to read must not vanish quietly: it stays in indexed= and is
+# counted by unmeasured= (the --skipped header's "indexed files this run never parsed" class). Root can
+# read a mode-000 file, so the arm SKIPS rather than passing there — a skipped arm leaves the conjunction
+# honestly, a green one on an unenforceable permission does not.
+if [ "$( id -u )" = "0" ]; then
+    printf '  SKIP  D2: running as uid 0 — a mode-000 file is still readable, so this arm cannot be posed
+'
+else
+    UNREAD="$TMP/unread"; cp -R "$FIX" "$UNREAD"
+    chmod 000 "$UNREAD/docs/adr/0007-isolation.rst"
+    if [ -r "$UNREAD/docs/adr/0007-isolation.rst" ]; then
+        no "D2: the mode-000 mutation did not take — the file is still readable, so the arm proves nothing"
+    else
+        ok "D2: the mode-000 mutation took (the .rst is unreadable on a real copy)"
+        "$BIN" "$UNREAD" --skipped --no-cache >"$TMP/unread_skipped.xml" 2>/dev/null
+        unmeasured="$( sed -n 's/.*unmeasured="\([0-9]*\)".*/\1/p' "$TMP/unread_skipped.xml" | head -1 )"
+        [ "${unmeasured:-0}" -ge 1 ] \
+            && ok "D2: the unreadable document is disclosed as unmeasured=${unmeasured}, not silently zero" \
+            || no "D2: unmeasured= is ${unmeasured:-absent} — an unreadable admitted document vanished silently"
+    fi
+    chmod 644 "$UNREAD/docs/adr/0007-isolation.rst" 2>/dev/null
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════
 echo
