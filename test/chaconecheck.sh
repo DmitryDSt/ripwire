@@ -19,12 +19,19 @@
 #       OUTSIDE the cone and B1::m is dropped while all 4095 A-children survive → count=4095, and the ONE
 #       call site is a 4095-way split → amb="1" (amb counts ambiguous CALLS, not tier width).
 #       A cap moved to the inner loop, or to 4097, or a dedup that changes discovery order, turns it red.
+#   (c) a memo HIT served AFTER the memo has grown is the requester's own cone, not the newest one: g7 asks for
+#       Hound again after g6 filled Droid's cone {Droid, Machine}; Hound's answer must still be Creature::vocalize
+#       and never Machine::vocalize. Staleness in the other sense is impossible by construction — the memo lives
+#       inside ONE buildGraph call and its inputs (chaUp/chaDown) are immutable for that lifetime, so there is
+#       nothing to invalidate — but a cached cone pointer, an index that goes wrong once the cone vector
+#       reallocates, or a key collision all present exactly as arm 6 reads: the wrong hierarchy's answer on a hit.
 # Plus the degrade rule (a cone that keeps nothing leaves the tier untouched — g4), a control where the cone
 # cannot fire (g5), determinism and XML well-formedness.
 #
 # RED-first proof (2026-09-09): against the pre-memo binary every arm PASSES (the expected values are the
 # per-call walk's own answers, hand-derived above); mutating the cap to `< 4097` fails arm 5; keying the memo
-# on the callee name fails arm 3.
+# on the callee name fails arm 3; returning the most recently filled cone on a hit (`&cones_.back()`) fails
+# arm 6 — observed red, then green after the revert, on 2026-09-09.
 #
 #   test/chaconecheck.sh                       # uses build/ripwire
 #   RIPWIRE_BIN=asan/ripwire test/chaconecheck.sh
@@ -47,7 +54,8 @@ cd "$ROOT"
 echo "chaconecheck: BIN=$BIN  CORPUS=test/chaconefix (+ a generated 4,097-class cap corpus)"
 
 # def lines derived from the source so the gate survives fixture edits
-ANIMAL_LINE="$( grep -n 'inline void Creature::vocalize()' "$FIX/zoo.h" | cut -d: -f1 )"
+ANIMAL_LINE="$(  grep -n 'inline void Creature::vocalize()' "$FIX/zoo.h" | cut -d: -f1 )"
+MACHINE_LINE="$( grep -n 'inline void Machine::vocalize()'  "$FIX/zoo.h" | cut -d: -f1 )"
 ROBOT_LINE="$(  grep -n 'void vocalize() { power'        "$FIX/zoo.h" | cut -d: -f1 )"
 
 # distinct vocalize target lines a caller resolves to (--callees rows carry p="zoo.h:LINE")
@@ -73,15 +81,25 @@ if [ "$( count g3 )" = 1 ] && printf '%s\n' "$T" | grep -qx "$ANIMAL_LINE" && ! 
     ok "g3 (Lynx): its own cone {Lynx, Creature} → Creature::vocalize only, no amb="
 else no "g3 (Lynx): expected exactly Creature::vocalize — got count=$( count g3 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
 T="$( targets g4 )"
-if [ "$( count g4 )" = 2 ] && printf '%s\n' "$T" | grep -qx "$ANIMAL_LINE" && printf '%s\n' "$T" | grep -qx "$ROBOT_LINE" && hasamb g4; then
-    ok "g4 (Lamp): cone {Lamp} keeps nothing → DEGRADE, both targets kept, amb= honest"
-else no "g4 (Lamp): expected the untouched 2-way split — got count=$( count g4 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
+if [ "$( count g4 )" = 3 ] && printf '%s\n' "$T" | grep -qx "$ANIMAL_LINE" && printf '%s\n' "$T" | grep -qx "$ROBOT_LINE" && printf '%s\n' "$T" | grep -qx "$MACHINE_LINE" && hasamb g4; then
+    ok "g4 (Lamp): cone {Lamp} keeps nothing → DEGRADE, all three targets kept, amb= honest"
+else no "g4 (Lamp): expected the untouched 3-way split — got count=$( count g4 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
 
 # ── 4) control: a parameter receiver has no var→type binding, so no cone can fire ───────────────────────
 T="$( targets g5 )"
-if [ "$( count g5 )" = 2 ] && hasamb g5; then
-    ok "g5 (Hound& parameter): receiver type unknown → 2-way split kept, amb= honest (control)"
+if [ "$( count g5 )" = 3 ] && hasamb g5; then
+    ok "g5 (Hound& parameter): receiver type unknown → 3-way split kept, amb= honest (control)"
 else no "g5 (Hound& parameter): control should stay ambiguous — got count=$( count g5 )"; fi
+
+# ── 6) a hit AFTER the memo grew: g6 fills Droid's cone, then g7 asks for Hound again ──────────────────────
+T="$( targets g6 )"
+if [ "$( count g6 )" = 1 ] && printf '%s\n' "$T" | grep -qx "$MACHINE_LINE" && ! hasamb g6; then
+    ok "g6 (Droid): third cone {Droid, Machine} → Machine::vocalize only (zoo.h:$MACHINE_LINE), no amb="
+else no "g6 (Droid): expected exactly Machine::vocalize — got count=$( count g6 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
+T="$( targets g7 )"
+if [ "$( count g7 )" = 1 ] && printf '%s\n' "$T" | grep -qx "$ANIMAL_LINE" && ! printf '%s\n' "$T" | grep -qx "$MACHINE_LINE" && ! hasamb g7; then
+    ok "g7 (Hound, after the memo grew): its OWN cone again — Creature::vocalize, never Machine::vocalize"
+else no "g7 (Hound, after the memo grew): a hit returned the wrong hierarchy — got count=$( count g7 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
 
 # ── 5) the 4096 BFS cap, reproduced exactly: Base→{A,B}, A→A1..A4095, B→B1; B is never expanded ─────────
 CAP="$TMP/capfix"; mkdir -p "$CAP"

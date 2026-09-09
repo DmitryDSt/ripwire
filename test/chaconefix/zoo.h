@@ -32,5 +32,17 @@ struct Lamp                      // no bases, no derived classes, no vocalize():
     int watts = 0;
 };
 
+struct Machine                   // a SECOND base with its own bodied vocalize(): the Droid cone excludes Creature
+{
+    void vocalize();
+    int  rpm = 0;
+};
+
+struct Droid : Machine           // implementor of Machine — does NOT define vocalize (inherits Machine::vocalize)
+{
+    int model = 0;
+};
+
 inline void Creature::vocalize() { tag = 3; }
+inline void Machine::vocalize()  { rpm = 5; }
 inline void Creature::move()  { tag = 4; }

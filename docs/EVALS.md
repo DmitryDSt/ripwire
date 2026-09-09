@@ -13076,7 +13076,19 @@ llvm rung, the same argv (`--grep-in=any`), the plain build with the memo, warm,
 | R1 `^#include` | 233.06 s | 10.08 s — not comparable: this branch predates the lane's line-anchor fix |
 
 Every query is now within a second of the absent literal: the scan is still hidden behind the graph, the
-graph is just 17× smaller. Re-deriving the lane's Q\* formula with its own tgrep numbers (B = 11.113 s,
+graph is just 17× smaller.
+
+**A correctness finding the timing table surfaced, stated as one.** The tgrep lane replaces `grepScanText`'s
+one-iterator-per-file regex scan with one per LINE, so that `^` and `$` mean line anchors. Priced interleaved on
+the scan's own `grep/1` scope with the lane merged onto this fix (host load 31; the pair-wise scope, not the
+wall clock, is the comparison): on llvm-project R1 `^#include` returns **1,487 hits on main and 289,646 on
+the lane** — 288,159 matches today's shipped binary misses silently, on one query, while reporting a confident
+count — and the per-line shape is *faster* (3.40 s against 4.48 s), because bounding each search to a line
+stops `.*` from running across lines, so it does strictly less work per attempt. R3 `malloc.*free` 2.28 → 1.68 s;
+the prefilter-defeating R4, which scans every byte, 1.27 → 1.50 s (+0.22 s on 2.9 GB, ≈3 ns a line); the literal
+control 1.16 → 1.20 s (an unchanged path: the noise floor). On go every pair is within noise or faster,
+including a forced full scan. Nothing super-linear, and the largest cost is 18% on the one pattern with no
+literal at all. Re-deriving the lane's Q\* formula with its own tgrep numbers (B = 11.113 s,
 q_index = 2.7513 s over the same six) and a post-fix q_scan of ≈ 9.3 s gives **Q\* ≈ 1.7 queries against
 ripwire-warm** where the lane read 0.1 — the resident index still pays for itself inside a two-query
 session at this scale, but no longer "before the first query finishes". tgrep itself was not re-run; only
