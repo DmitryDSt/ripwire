@@ -17,6 +17,24 @@ around and reading whole files.
 
 ***Paddle out with a map.***
 
+### The goal: one question, one complete answer.
+
+**Terminality is the objective.** Ask the codebase a question and the answer should carry everything
+you need — no follow-on grep, no three more whole-file reads to fill in what it left out. A call
+followed by three greps is the same search paid for twice: it does not save you tokens and it does
+not make the coding faster.
+
+**Two things make that reachable in practice, and neither is the destination.** Answers are honest
+about their own limits — a count that cannot be a total is labelled a floor, a zero means "none
+found" and never "none exists", every truncation is disclosed — so an answer never looks more
+complete than it is, and the map never degrades the code by guessing. And an answer can be given a
+token budget, so what one costs is something you ask for rather than discover; where a complete
+answer will not fit, it says it went over rather than silently dropping the row you needed.
+
+Those two are the stair-steps: honest about what is missing, priced in what it spends. The step they
+climb toward is a question fully answered in one call, which is not always trivial to reach — and
+where it is not, the output says so rather than pretending otherwise.
+
 <details>
 <summary><b>Fifty years of software-engineering results, and research from last month.</b> 46 repositories and 69 papers folded — McCabe (1976) through to <b>seven papers published in the last two months</b> — each row in <a href="docs/LINEAGE.md"><b>docs/LINEAGE.md</b></a> naming the lesson taken and the file it lives in, all of it put into a single blazing-fast compiled executable</summary>
 
