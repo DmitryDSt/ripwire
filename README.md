@@ -1122,7 +1122,9 @@ trailing `…`.
 <summary><code>--callers</code> — a call graph built on the spot, and why <code>count="6"</code> ships labelled a floor</summary>
 
 **Ten seconds, no index server, no embeddings, no API key** — a parse and a call graph, built on the
-spot:
+spot. The rows below are a real capture: the callers and their files are gate-held current
+(`test/readmeexamplecheck.sh`), the `:line` suffixes were true when captured and drift as the files
+grow — nothing can keep a line number true in a document, so it is not claimed here.
 
 ```
 $ ripwire . --callers=rankGraphTeleport
