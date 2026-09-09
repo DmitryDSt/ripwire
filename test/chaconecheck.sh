@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# chaconecheck.sh — gate for the B2.1 CHA-lite cone MEMO (perf round 2026-09-09, the super-linear warm
+# chaconecheck.sh — gate for the B2.1 CHA-lite cone MEMO (fixture names are deliberately UNIQUE across test/:
+# recallevalcheck pins --for=Robot repo-wide to chafix, so this hierarchy is Creature/Hound/Lynx/Automaton/Lamp) (perf round 2026-09-09, the super-linear warm
 # --grep floor): graph.h::buildGraph used to recompute a receiver type's inheritance cone — {type} ∪
 # ancestors ∪ descendants, two BFS walks over the class-NAME graph with an O(n²) std::find dedup and a
 # 4096-entry cap per walk — on EVERY still-ambiguous receiver-typed call. Measured on llvm-project
@@ -9,9 +10,9 @@
 #
 # WHAT THIS GATE PINS: that the memoised cone is the SAME SET the per-call walk produced — including the
 # two behaviours a re-implementation is most likely to change silently:
-#   (a) the cone is keyed on the RECEIVER TYPE, not the callee name: g1/g2 (Dog, two files) and g3 (Cat)
-#       call the same `speak` and must get their OWN cones; a memo keyed on the callee would hand Cat the
-#       Dog answer (both contain Animal — so arm 3 pins the *Lamp* case too, where the answers differ);
+#   (a) the cone is keyed on the RECEIVER TYPE, not the callee name: g1/g2 (Hound, two files) and g3 (Lynx)
+#       call the same `vocalize` and must get their OWN cones; a memo keyed on the callee would hand Lynx the
+#       Hound answer (both contain Creature — so arm 3 pins the *Lamp* case too, where the answers differ);
 #   (b) the BFS cap is `out.size() < 4096` checked at the OUTER loop only: the adjacency list that crosses
 #       the cap is pushed whole, and nothing AFTER it is expanded. Arm 5 builds Base→{A,B}, A→A1..A4095,
 #       B→B1: Base's list [A,B] is expanded, A's 4095 children cross the cap, B is never expanded, so B1 is
@@ -46,31 +47,31 @@ cd "$ROOT"
 echo "chaconecheck: BIN=$BIN  CORPUS=test/chaconefix (+ a generated 4,097-class cap corpus)"
 
 # def lines derived from the source so the gate survives fixture edits
-ANIMAL_LINE="$( grep -n 'inline void Animal::speak()' "$FIX/zoo.h" | cut -d: -f1 )"
-ROBOT_LINE="$(  grep -n 'void speak() { power'        "$FIX/zoo.h" | cut -d: -f1 )"
+ANIMAL_LINE="$( grep -n 'inline void Creature::vocalize()' "$FIX/zoo.h" | cut -d: -f1 )"
+ROBOT_LINE="$(  grep -n 'void vocalize() { power'        "$FIX/zoo.h" | cut -d: -f1 )"
 
-# distinct speak target lines a caller resolves to (--callees rows carry p="zoo.h:LINE")
+# distinct vocalize target lines a caller resolves to (--callees rows carry p="zoo.h:LINE")
 targets(){ "$BIN" "$FIX" --callees="$1" --no-cache 2>/dev/null | tr '>' '\n' | grep -oE 'zoo\.h:[0-9]+' | grep -oE '[0-9]+$' | sort -un; }
 count(){  "$BIN" "$FIX" --callees="$1" --no-cache 2>/dev/null | grep -oE ' count="[0-9]+"' | head -1 | grep -oE '[0-9]+'; }
 hasamb(){ "$BIN" "$FIX" --no-cache --top-k=100000 2>/dev/null | grep -oE "n=\"$1\"[^>]*" | grep -q 'amb='; }
 
-# ── 1) the first Dog cone (a.cpp): Animal::speak ONLY, Robot dropped, no amb ────────────────────────────
+# ── 1) the first Hound cone (a.cpp): Creature::vocalize ONLY, Automaton dropped, no amb ────────────────────────────
 T="$( targets g1 )"
 if [ "$( count g1 )" = 1 ] && printf '%s\n' "$T" | grep -qx "$ANIMAL_LINE" && ! printf '%s\n' "$T" | grep -qx "$ROBOT_LINE" && ! hasamb g1; then
-    ok "g1 (Dog, a.cpp): Animal::speak only (zoo.h:$ANIMAL_LINE), Robot dropped, no amb="
-else no "g1 (Dog, a.cpp): expected exactly Animal::speak — got count=$( count g1 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
+    ok "g1 (Hound, a.cpp): Creature::vocalize only (zoo.h:$ANIMAL_LINE), Automaton dropped, no amb="
+else no "g1 (Hound, a.cpp): expected exactly Creature::vocalize — got count=$( count g1 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
 
-# ── 2) the memo HIT (b.cpp asks for the Dog cone again): byte-identical answer ──────────────────────────
+# ── 2) the memo HIT (b.cpp asks for the Hound cone again): byte-identical answer ──────────────────────────
 T="$( targets g2 )"
 if [ "$( count g2 )" = 1 ] && printf '%s\n' "$T" | grep -qx "$ANIMAL_LINE" && ! printf '%s\n' "$T" | grep -qx "$ROBOT_LINE" && ! hasamb g2; then
-    ok "g2 (Dog, b.cpp — memo hit): Animal::speak only, Robot dropped, no amb="
-else no "g2 (Dog, b.cpp): memo hit differs from g1 — got count=$( count g2 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
+    ok "g2 (Hound, b.cpp — memo hit): Creature::vocalize only, Automaton dropped, no amb="
+else no "g2 (Hound, b.cpp): memo hit differs from g1 — got count=$( count g2 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
 
-# ── 3) a DIFFERENT cone on the same callee name (Cat), and one with NO inheritance facts (Lamp) ─────────
+# ── 3) a DIFFERENT cone on the same callee name (Lynx), and one with NO inheritance facts (Lamp) ─────────
 T="$( targets g3 )"
 if [ "$( count g3 )" = 1 ] && printf '%s\n' "$T" | grep -qx "$ANIMAL_LINE" && ! hasamb g3; then
-    ok "g3 (Cat): its own cone {Cat, Animal} → Animal::speak only, no amb="
-else no "g3 (Cat): expected exactly Animal::speak — got count=$( count g3 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
+    ok "g3 (Lynx): its own cone {Lynx, Creature} → Creature::vocalize only, no amb="
+else no "g3 (Lynx): expected exactly Creature::vocalize — got count=$( count g3 ) lines={$( printf '%s' "$T" | tr '\n' ' ')}"; fi
 T="$( targets g4 )"
 if [ "$( count g4 )" = 2 ] && printf '%s\n' "$T" | grep -qx "$ANIMAL_LINE" && printf '%s\n' "$T" | grep -qx "$ROBOT_LINE" && hasamb g4; then
     ok "g4 (Lamp): cone {Lamp} keeps nothing → DEGRADE, both targets kept, amb= honest"
@@ -79,8 +80,8 @@ else no "g4 (Lamp): expected the untouched 2-way split — got count=$( count g4
 # ── 4) control: a parameter receiver has no var→type binding, so no cone can fire ───────────────────────
 T="$( targets g5 )"
 if [ "$( count g5 )" = 2 ] && hasamb g5; then
-    ok "g5 (Dog& parameter): receiver type unknown → 2-way split kept, amb= honest (control)"
-else no "g5 (Dog& parameter): control should stay ambiguous — got count=$( count g5 )"; fi
+    ok "g5 (Hound& parameter): receiver type unknown → 2-way split kept, amb= honest (control)"
+else no "g5 (Hound& parameter): control should stay ambiguous — got count=$( count g5 )"; fi
 
 # ── 5) the 4096 BFS cap, reproduced exactly: Base→{A,B}, A→A1..A4095, B→B1; B is never expanded ─────────
 CAP="$TMP/capfix"; mkdir -p "$CAP"
