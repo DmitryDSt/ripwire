@@ -1798,9 +1798,9 @@ wrong, and it has. These are the results that say so, all in-tree, all published
 ### In the tests
 
 <details>
-<summary><b>563 gate scripts</b>, five contracts no unit test can hold, and the house rule: write the gate before the code it measures</summary>
+<summary><b>564 gate scripts</b>, five contracts no unit test can hold, and the house rule: write the gate before the code it measures</summary>
 
-`test/regression.sh` names **563 gate scripts** and is the authoritative list;
+`test/regression.sh` names **564 gate scripts** and is the authoritative list;
 `python3 test/pargates.py . ./build/ripwire -j 6` runs the same set in parallel. On top of them sit the
 contracts that do not fit a unit test: two runs byte-identical, warm output identical to cold, output
 that pipes clean through `xmllint --noout`, a sanitizer build with `-fno-sanitize-recover=all`, and a
@@ -1850,6 +1850,7 @@ ripwire wrap claude      # CLI-first: the CLI call, then `claude mcp add` as the
 ripwire wrap codex       # CLI-first: optional MCP restricted to audit/health verbs in Codex TOML
 ripwire wrap opencode    # CLI-first: the AGENTS.md wiring; its "mcp" stanza offered as the alternative
 ripwire wrap openclaw    # CLI-first: same ~/.agents/skills root Codex uses; no shell hook slot
+ripwire wrap hermes      # CLI-first: hermes mcp add as the warm-index alternative; hook port pending
 ripwire wrap cursor      # MCP:       the mcpServers stanza for .cursor/mcp.json (or ~/.cursor/mcp.json)
 ripwire wrap windsurf    # MCP:       that client's stanza
 ripwire wrap gemini      # MCP:       that client's stanza
