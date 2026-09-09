@@ -7,7 +7,7 @@
 [![Runtime dependencies](https://img.shields.io/badge/runtime%20dependencies-none-blue.svg)](THIRD_PARTY.md)
 [![Slides](https://img.shields.io/badge/slides-the%20showcase%20deck-56d6e8.svg)](present/ripwire-showcase.pdf)
 
-# Rip'n Fast. Less Tokens. Better Code.
+# Rip'n Fast. Fewer Tokens. Better Code.
 
 ## Give your coding agent a map before it reads the repo.
 
