@@ -15,7 +15,7 @@
 deterministic call graph — what to touch, what it breaks, which tests to run — instead of grepping
 around and reading whole files.
 
-***Paddle out with a map.***
+<p align="center"><img src="docs/assets/paddle-out.svg" alt="Paddle out with a map." width="470"></p>
 
 ### The goal: one question, one complete answer.
 
